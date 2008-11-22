@@ -1,0 +1,7 @@
+History.txt
+Manifest.txt
+README.txt
+Rakefile
+bin/gauntlet
+lib/gauntlet.rb
+test/test_gauntlet.rb
