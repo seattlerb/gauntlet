@@ -5,8 +5,8 @@ require 'hoe'
 require './lib/gauntlet.rb'
 
 Hoe.new('gauntlet', Gauntlet::VERSION) do |p|
-  # p.rubyforge_name = 'gauntletx' # if different than lowercase project name
-  # p.developer('FIX', 'FIX@example.com')
+  p.rubyforge_name = 'seattlerb'
+  p.developer('Ryan Davis', 'ryand-ruby@zenspider.com')
 end
 
 # vim: syntax=Ruby
