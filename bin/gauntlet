@@ -1,0 +1,15 @@
+#!/usr/bin/ruby -ws
+
+require 'gauntlet'
+
+class MyGauntlet < Gauntlet
+  def run name
+    puts name
+  end
+end
+
+filter = ARGV.shift
+filter = Regexp.new filter if filter
+
+gauntlet = MyGauntlet.new
+gauntlet.run_the_gauntlet filter
