@@ -7,4 +7,6 @@ if ARGV.empty? then
 end
 
 name = ARGV.shift
+
+require "rubygems"
 require "gauntlet_#{name}"
