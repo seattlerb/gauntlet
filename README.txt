@@ -1,6 +1,6 @@
 = gauntlet
 
-* FIX (url)
+* http://rubyforge.org/projects/seattlerb
 
 == DESCRIPTION:
 
@@ -12,21 +12,34 @@ FIX (describe your package)
 
 == SYNOPSIS:
 
-  FIX (code sample of usage)
+  require 'gauntlet'
+  
+  class MyGauntlet < Gauntlet
+    def run name
+      data[name] = Dir["**/*.rb"]
+      self.dirty = true
+    end
+  end
+  
+  filter = ARGV.shift
+  filter = Regexp.new filter if filter
+  
+  gauntlet = MyGauntlet.new
+  gauntlet.run_the_gauntlet filter
 
 == REQUIREMENTS:
 
-* FIX (list of requirements)
+* rubygems
 
 == INSTALL:
 
-* FIX (sudo gem install, anything else)
+* sudo gem install gauntlet
 
 == LICENSE:
 
 (The MIT License)
 
-Copyright (c) 2008 FIX
+Copyright (c) 2008 Ryan Davis
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
