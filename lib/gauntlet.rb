@@ -1,5 +1,6 @@
 require 'rubygems/remote_fetcher'
 require 'thread'
+require 'yaml'
 
 $u ||= false
 $f ||= false
@@ -12,26 +13,43 @@ class Gauntlet
 
   GEMURL = URI.parse 'http://gems.rubyforge.org'
   GEMDIR = File.expand_path "~/.gauntlet"
+  DATADIR = File.expand_path "~/.gauntlet/data"
 
   # stupid dups usually because of "dash" renames
-  # TODO: probably stale by now - try to generate dynamically
-  STUPID_GEMS = %w(ruby-aes-table1-1.0.gem
-                   ruby-aes-unroll1-1.0.gem
-                   hpricot-scrub-0.2.0.gem
-                   extract_curves-0.0.1.gem
-                   extract_curves-0.0.1-i586-linux.gem
-                   extract_curves-0.0.1-mswin32.gem
-                   rfeedparser-ictv-0.9.931.gem
-                   spec_unit-0.0.1.gem)
+  STUPID_GEMS = %w(ajax-scaffold-generator
+                   extract_curves
+                   flickr-fu
+                   hpricot-scrub
+                   html_me
+                   merb-builder
+                   merb-jquery
+                   merb-parts
+                   merb_exceptions
+                   merb_helpers
+                   merb_param_protection
+                   model_graph
+                   not_naughty
+                   rfeedparser-ictv
+                   spec-converter
+                   spec_unit)
+
+  attr_accessor :dirty, :data_file, :data
+
+  def initialize
+    name = self.class.name.downcase.sub(/gauntlet/, '')
+    self.data_file = "#{DATADIR}/#{name}-data.yml"
+    self.dirty = false
+  end
 
   def initialize_dir
     Dir.mkdir GEMDIR unless File.directory? GEMDIR
+    Dir.mkdir DATADIR unless File.directory? DATADIR
     in_gem_dir do
       File.symlink ".", "cache" unless File.exist? "cache"
     end
   end
 
-  def get_source_index
+  def source_index
     @index ||= in_gem_dir do
       dump = if ($u and not $F) or not File.exist? '.source_index' then
                url = GEMURL + "Marshal.#{Gem.marshal_version}.Z"
@@ -48,31 +66,55 @@ class Gauntlet
     end
   end
 
-  def get_latest_gems
-    @cache ||= get_source_index.latest_specs
+  def latest_gems
+    @cache ||= source_index.latest_specs
   end
 
-  def get_gems_by_name
-    @by_name ||= Hash[*get_latest_gems.map { |gem|
+  def gems_by_name
+    @by_name ||= Hash[*latest_gems.map { |gem|
                         [gem.name, gem, gem.full_name, gem]
                       }.flatten]
   end
 
   def dependencies_of name
-    index = get_source_index
-    get_gems_by_name[name].dependencies.map { |dep| index.search(dep).last }
+    index = source_index
+    gems_by_name[name].dependencies.map { |dep| index.search(dep).last }
   end
 
   def dependent_upon name
-    get_latest_gems.find_all { |gem|
+    latest_gems.find_all { |gem|
       gem.dependencies.any? { |dep| dep.name == name }
     }
+  end
+
+  def find_stupid_gems
+    gems   = Hash.new { |h,k| h[k] = [] }
+    stupid = []
+    latest = {}
+
+    latest_gems.each do |spec|
+      name = spec.name.gsub(/-/, '_')
+      next unless name =~ /_/
+      gems[name] << spec
+    end
+
+    gems.reject! { |k,v| v.size == 1 || v.map { |s| s.name }.uniq.size == 1 }
+
+    gems.each do |k,v|
+      sorted = v.sort_by { |spec| spec.version }
+      latest[sorted.last.name] = true
+      sorted.each do |spec|
+        stupid << spec.name unless latest[spec.name]
+      end
+    end
+
+    stupid.uniq
   end
 
   def update_gem_tarballs
     initialize_dir
 
-    latest = get_latest_gems
+    latest = self.latest_gems
 
     puts "updating mirror"
 
@@ -96,8 +138,9 @@ class Gauntlet
       puts "fetching #{tasks.size} gems"
 
       threads = []
-      1.times do
+      10.times do
         threads << Thread.new do
+          fetcher = Gem::RemoteFetcher.new nil # fuck proxies
           until tasks.empty? do
             spec = tasks.shift
             full_name = spec.full_name
@@ -107,7 +150,7 @@ class Gauntlet
             unless gems.include? gem_name then
               begin
                 warn "downloading #{full_name}"
-                Gem::RemoteFetcher.fetcher.download(spec, GEMURL, Dir.pwd)
+                fetcher.download(spec, GEMURL, Dir.pwd)
               rescue Gem::RemoteFetcher::FetchError
                 warn "  failed"
                 next
@@ -121,9 +164,7 @@ class Gauntlet
               system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec.rb"
             end
 
-            system "chmod -R u+w #{full_name}"
-            system "tar zmcf #{tgz_name} #{full_name}"
-            system "rm -rf   #{full_name} #{gem_name}"
+            system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} #{full_name} && rm -rf   #{full_name} #{gem_name}"
           end
         end
       end
@@ -179,15 +220,36 @@ class Gauntlet
     end
   end
 
+  ##
+  # Override this to customize gauntlet. See run_the_gauntlet for
+  # other ways of adding behavior.
+
   def run name
     raise "subclass responsibility"
   end
+
+  ##
+  # Override this to return true if the gem should be skipped.
+
+  def should_skip? name
+    self.data[name]
+  end
+
+  ##
+  # This is the main driver for gauntlet. filter allows you to pass in
+  # a regexp to only run against a subset of the gems available. You
+  # can pass a block to run_the_gauntlet or it will call run. Both are
+  # passed the name of the gem and are executed within the gem
+  # directory.
 
   def run_the_gauntlet filter = nil
     initialize_dir
     update_gem_tarballs if $u
 
+    self.data = load_yaml data_file
+
     each_gem filter do |name|
+      next if should_skip? name
       with_gem name do
         if block_given? then
           yield name
@@ -196,5 +258,99 @@ class Gauntlet
         end
       end
     end
+  rescue Interrupt
+    warn "user cancelled. quitting"
+  ensure
+    save_yaml data_file, data if dirty
+  end
+end
+
+############################################################
+# Extensions and Overrides
+
+# bug in RemoteFetcher#download prevents multithreading. Remove after 1.3.2
+class Gem::RemoteFetcher
+  def download(spec, source_uri, install_dir = Gem.dir)
+    if File.writable?(install_dir)
+      cache_dir = File.join install_dir, 'cache'
+    else
+      cache_dir = File.join(Gem.user_dir, 'cache')
+    end
+
+    gem_file_name = "#{spec.full_name}.gem"
+    local_gem_path = File.join cache_dir, gem_file_name
+
+    FileUtils.mkdir_p cache_dir rescue nil unless File.exist? cache_dir
+
+    source_uri = URI.parse source_uri unless URI::Generic === source_uri
+    scheme = source_uri.scheme
+
+    # URI.parse gets confused by MS Windows paths with forward slashes.
+    scheme = nil if scheme =~ /^[a-z]$/i
+
+    case scheme
+    when 'http', 'https' then
+      unless File.exist? local_gem_path then
+        begin
+          say "Downloading gem #{gem_file_name}" if
+            Gem.configuration.really_verbose
+
+          remote_gem_path = source_uri + "gems/#{gem_file_name}"
+
+          gem = self.fetch_path remote_gem_path
+        rescue Gem::RemoteFetcher::FetchError
+          raise if spec.original_platform == spec.platform
+
+          alternate_name = "#{spec.original_name}.gem"
+
+          say "Failed, downloading gem #{alternate_name}" if
+            Gem.configuration.really_verbose
+
+          remote_gem_path = source_uri + "gems/#{alternate_name}"
+
+          gem = self.fetch_path remote_gem_path
+        end
+
+        File.open local_gem_path, 'wb' do |fp|
+          fp.write gem
+        end
+      end
+    when nil, 'file' then # TODO test for local overriding cache
+      begin
+        FileUtils.cp source_uri.to_s, local_gem_path
+      rescue Errno::EACCES
+        local_gem_path = source_uri.to_s
+      end
+
+      say "Using local gem #{local_gem_path}" if
+        Gem.configuration.really_verbose
+    else
+      raise Gem::InstallError, "unsupported URI scheme #{source_uri.scheme}"
+    end
+
+    local_gem_path
+  end
+end
+
+class Array
+  def sum
+    sum = 0
+    self.each { |i| sum += i }
+    sum
+  end
+
+  def average
+    return self.sum / self.length.to_f
+  end
+
+  def sample_variance
+    avg = self.average
+    sum = 0
+    self.each { |i| sum += (i - avg) ** 2 }
+    return (1 / self.length.to_f * sum)
+  end
+
+  def stddev
+    return Math.sqrt(self.sample_variance)
   end
 end
