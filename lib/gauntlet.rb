@@ -161,7 +161,7 @@ class Gauntlet
 
             unless File.directory? full_name then
               system "gem unpack cache/#{gem_name} &> /dev/null"
-              system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec.rb"
+              system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
             end
 
             system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} #{full_name} && rm -rf   #{full_name} #{gem_name}"
