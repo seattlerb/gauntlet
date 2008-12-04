@@ -246,7 +246,7 @@ class Gauntlet
     initialize_dir
     update_gem_tarballs if $u
 
-    self.data = load_yaml data_file
+    self.data ||= load_yaml data_file
 
     each_gem filter do |name|
       next if should_skip? name
