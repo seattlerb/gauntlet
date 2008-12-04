@@ -4,11 +4,17 @@
 
 == DESCRIPTION:
 
-FIX (describe your package)
+Gauntlet is a pluggable means of running code against all the latest
+gems and storing off the data.
 
 == FEATURES/PROBLEMS:
 
-* FIX (list of features or problems)
+* Downloads all the latest gems and converts them to tarballs for easy access.
+* Iterates through all downloaded gems, unpacks them, and then runs your code.
+* Automates storage of results to YAML files.
+* Easily skips over projects that already have results (overridable).
+* gauntlet commandline locates your gauntlet library via rubygems:
+  * eg. `gauntlet flog` finds gauntlet_flog.rb in the flog gem.
 
 == SYNOPSIS:
 
@@ -39,7 +45,7 @@ FIX (describe your package)
 
 (The MIT License)
 
-Copyright (c) 2008 Ryan Davis
+Copyright (c) 2008 Ryan Davis, Seattle.rb
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
