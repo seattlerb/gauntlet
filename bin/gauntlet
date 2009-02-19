@@ -8,5 +8,87 @@ end
 
 name = ARGV.shift
 
-require "rubygems"
-require "gauntlet_#{name}"
+gauntlet_dir = File.expand_path("~/.gauntlet/data")
+
+case name
+when "help" then
+  require 'rubygems'
+
+  puts "gauntlet cmd"
+  puts "  cmds:"
+  puts "    help          - show help"
+  puts "    list          - list known gauntlet data for reports"
+  puts "    report <name> - show a report on <name>, requires specific data format"
+  puts "    <name>        - run the gauntlet for named plugin"
+  Gem.find_files('gauntlet_*.rb').each do |path| 
+    name = File.basename(path, ".rb").sub(/gauntlet_/, '')
+    puts "      #{name}  - a known plugin"
+  end
+when "list" then
+  puts "Gauntlet Data:"
+  puts
+  Dir.chdir gauntlet_dir do
+    puts Dir["*.yml"].map { |s| s.sub(/-data.yml/, '') }.join("\n")
+  end
+when "report" then
+  require 'yaml'
+
+  name = ARGV.shift
+  abort "need a name to report on" unless name
+  path = File.join gauntlet_dir, "#{name}-data.yml"
+  data = YAML.load File.read(path)
+
+  paths = Hash.new 0
+  names = Hash.new 0
+  good = bad = skip = 0
+
+  data.each do |project, files|
+    if files == true then
+      good += 1
+      next
+    end
+    files.each do |path, result|
+      case result
+      when true then
+        good += 1
+        next
+      when Symbol then
+        skip += 1
+        next
+      when String then
+        bad += 1
+
+        names[File.basename(path)] += 1
+
+        loop do
+          path = File.dirname path
+          break if path.empty? or path == "."
+          paths[path] += 1
+        end
+      end
+    end
+  end
+
+  def top_n ary, n = 20
+    ary.sort_by { |k,v| -v }.first(n).each do |path, count|
+      puts "%5d: %s" % [count, path]
+    end
+  end
+
+  def table name, n, t
+    puts "%6d %5.2f%% %s" % [n, n / t * 100, name]
+  end
+
+  total = good + bad + skip.to_f
+
+  table "good", good, total
+  table  "bad",  bad, total
+  table "skip", skip, total
+  puts
+  top_n paths
+  puts
+  top_n names
+else
+  require "rubygems"
+  require "gauntlet_#{name}"
+end
