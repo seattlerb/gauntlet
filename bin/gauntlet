@@ -24,6 +24,10 @@ when "help" then
     name = File.basename(path, ".rb").sub(/gauntlet_/, '')
     puts "      #{name}  - a known plugin"
   end
+when "update" then
+  require 'gauntlet'
+  $u = true
+  Gauntlet.new.update_gem_tarballs
 when "list" then
   puts "Gauntlet Data:"
   puts

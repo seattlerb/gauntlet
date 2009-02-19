@@ -151,8 +151,8 @@ class Gauntlet
               begin
                 warn "downloading #{full_name}"
                 fetcher.download(spec, GEMURL, Dir.pwd)
-              rescue Gem::RemoteFetcher::FetchError
-                warn "  failed"
+              rescue Gem::RemoteFetcher::FetchError => e
+                warn "  failed: #{e.message}"
                 next
               end
             end
@@ -333,7 +333,7 @@ class Gem::RemoteFetcher
     end
 
     local_gem_path
-  end
+  end unless instance_methods.include? "download"
 end
 
 class Array
