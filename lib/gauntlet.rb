@@ -191,13 +191,17 @@ class Gauntlet
 
   def with_gem name
     in_gem_dir do
+      process_dir = "#{$$}"
       begin
-        system "tar zxmf #{name}.tgz 2> /dev/null"
-        Dir.chdir name do
-          yield name
+        Dir.mkdir process_dir
+        Dir.chdir process_dir do
+          system "tar zxmf ../#{name}.tgz 2> /dev/null"
+          Dir.chdir name do
+            yield name
+          end
         end
       ensure
-        system "rm -r #{name}"
+        system "rm -rf #{process_dir}"
       end
     end
   end
