@@ -142,17 +142,17 @@ class Gauntlet
         threads << Thread.new do
           fetcher = Gem::RemoteFetcher.new nil # fuck proxies
           until tasks.empty? do
-            spec = tasks.shift
+            spec      = tasks.shift
             full_name = spec.full_name
-            tgz_name = "#{full_name}.tgz"
-            gem_name = "#{full_name}.gem"
+            tgz_name  = "#{full_name}.tgz"
+            gem_name  = "#{full_name}.gem"
 
             unless gems.include? gem_name then
               begin
                 warn "downloading #{full_name}"
                 fetcher.download(spec, GEMURL, Dir.pwd)
               rescue Gem::RemoteFetcher::FetchError => e
-                warn "  failed: #{e.message}"
+                warn "  failed #{full_name}: #{e.message}"
                 next
               end
             end
@@ -252,6 +252,14 @@ class Gauntlet
 
     self.data ||= load_yaml data_file
 
+    outdateds = self.data.keys - in_gem_dir do
+      Dir["*.tgz"].map { |tgz| File.basename(tgz, ".tgz") }
+    end
+
+    outdateds.each do |outdated|
+      self.data.delete outdated
+    end
+
     each_gem filter do |name|
       next if should_skip? name
       with_gem name do
@@ -274,6 +282,7 @@ end
 
 # bug in RemoteFetcher#download prevents multithreading. Remove after 1.3.2
 class Gem::RemoteFetcher
+  alias :old_download :download
   def download(spec, source_uri, install_dir = Gem.dir)
     if File.writable?(install_dir)
       cache_dir = File.join install_dir, 'cache'
@@ -333,7 +342,7 @@ class Gem::RemoteFetcher
     end
 
     local_gem_path
-  end unless instance_methods.include? "download"
+  end
 end
 
 class Array
