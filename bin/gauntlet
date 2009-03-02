@@ -20,9 +20,9 @@ when "help" then
   puts "    list          - list known gauntlet data for reports"
   puts "    report <name> - show a report on <name>, requires specific data format"
   puts "    <name>        - run the gauntlet for named plugin"
-  Gem.find_files('gauntlet_*.rb').each do |path| 
+  Gem.find_files('gauntlet_*.rb').each do |path|
     name = File.basename(path, ".rb").sub(/gauntlet_/, '')
-    puts "      #{name}  - a known plugin"
+    puts "    %-13s - a known plugin" % name
   end
 when "update" then
   require 'gauntlet'

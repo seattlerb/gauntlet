@@ -52,13 +52,15 @@ class Gauntlet
   def source_index
     @index ||= in_gem_dir do
       dump = if ($u and not $F) or not File.exist? '.source_index' then
+               warn "fetching and caching gem index"
                url = GEMURL + "Marshal.#{Gem.marshal_version}.Z"
                dump = Gem::RemoteFetcher.fetcher.fetch_path url
-               require 'zlib'
+               require 'zlib' # HACK for rubygems :(
                dump = Gem.inflate dump
                open '.source_index', 'wb' do |io| io.write dump end
                dump
              else
+               warn "using cached gem index"
                open '.source_index', 'rb' do |io| io.read end
              end
 
@@ -116,7 +118,7 @@ class Gauntlet
 
     latest = self.latest_gems
 
-    puts "updating mirror"
+    warn "updating mirror"
 
     in_gem_dir do
       gems = Dir["*.gem"]
@@ -124,7 +126,7 @@ class Gauntlet
 
       old = tgzs - latest.map { |spec| "#{spec.full_name}.tgz" }
       unless old.empty? then
-        puts "deleting #{old.size} tgzs"
+        warn "deleting #{old.size} tgzs"
         old.each do |tgz|
           File.unlink tgz
         end
@@ -135,7 +137,7 @@ class Gauntlet
       latest.reject! { |spec| tgzs.include? "#{spec.full_name}.tgz" }
       tasks.push(latest.shift) until latest.empty? # LAME
 
-      puts "fetching #{tasks.size} gems"
+      warn "fetching #{tasks.size} gems"
 
       threads = []
       10.times do
@@ -149,7 +151,7 @@ class Gauntlet
 
             unless gems.include? gem_name then
               begin
-                warn "downloading #{full_name}"
+                warn "downloading  #{full_name}"
                 fetcher.download(spec, GEMURL, Dir.pwd)
               rescue Gem::RemoteFetcher::FetchError => e
                 warn "  failed #{full_name}: #{e.message}"
