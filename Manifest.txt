@@ -4,4 +4,5 @@ README.txt
 Rakefile
 bin/gauntlet
 lib/gauntlet.rb
+lib/gauntlet_grep.rb
 test/test_gauntlet.rb
