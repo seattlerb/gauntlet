@@ -1,3 +1,14 @@
+=== 1.1.0 / 2009-06-23
+
+* 6 minor enhancements:
+
+  *	Added update command
+  * Added example plugin lib/gauntlet_grep.rb
+  * Added subcommands: help list report
+  * Cleaned output
+  * Updated to new hoe capabilities
+  * gauntlet now runs in a unique subdirectory, so multiple can run at once
+
 === 1.0.0 / 2008-12-04
 
 * 1 major enhancement
