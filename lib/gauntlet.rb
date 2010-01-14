@@ -39,6 +39,7 @@ class Gauntlet
     name = self.class.name.downcase.sub(/gauntlet/, '')
     self.data_file = "#{DATADIR}/#{name}-data.yml"
     self.dirty = false
+    @cache = nil
   end
 
   def initialize_dir
@@ -69,7 +70,24 @@ class Gauntlet
   end
 
   def latest_gems
-    @cache ||= source_index.latest_specs
+    return @cache if @cache
+
+    @cache = []
+
+    spec_fetcher = Gem::SpecFetcher.new
+    gems_and_sources = spec_fetcher.list
+
+    gems_and_sources.each do |source_uri, gems|
+      gems.each do |gem|
+        begin
+          @cache << spec_fetcher.fetch_spec(gem, source_uri)
+        rescue Gem::RemoteFetcher::FetchError => e
+          warn "couldn't fetch #{gem.inspect} (#{e.message})"
+        end
+      end
+    end
+
+    @cache
   end
 
   def gems_by_name
