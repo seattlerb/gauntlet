@@ -18,6 +18,7 @@ when "help" then
   puts "  cmds:"
   puts "    help          - show help"
   puts "    list          - list known gauntlet data for reports"
+  puts "    update        - update the gems, but don't run anything"
   puts "    report <name> - show a report on <name>, requires specific data format"
   puts "    <name>        - run the gauntlet for named plugin"
   Gem.find_files('gauntlet_*.rb').each do |path|

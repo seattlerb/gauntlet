@@ -73,19 +73,25 @@ class Gauntlet
     return @cache if @cache
 
     @cache = []
+    tasks = Queue.new
 
-    spec_fetcher = Gem::SpecFetcher.new
-    gems_and_sources = spec_fetcher.list
-
-    gems_and_sources.each do |source_uri, gems|
+    Gem::SpecFetcher.new.list.each do |source_uri, gems|
       gems.each do |gem|
-        begin
-          @cache << spec_fetcher.fetch_spec(gem, source_uri)
-        rescue Gem::RemoteFetcher::FetchError => e
-          warn "couldn't fetch #{gem.inspect} (#{e.message})"
-        end
+        tasks.push [source_uri, gem]
       end
     end
+
+    warn "Fetching specs..."
+    workers tasks, 50 do |(source_uri, gem)|
+      Thread.current[:fetcher] ||=
+        Gem::SpecFetcher.new Gem::RemoteFetcher.new(nil)
+      begin
+        @cache << Thread.current[:fetcher].fetch_spec(gem, source_uri)
+      rescue Gem::RemoteFetcher::FetchError => e
+        warn "couldn't fetch #{gem.inspect} (#{e.message})"
+      end
+    end
+    warn "...done"
 
     @cache
   end
@@ -151,51 +157,57 @@ class Gauntlet
       end
 
       tasks = Queue.new
-      latest.sort!
+      latest = latest.sort_by { |spec| spec.full_name.downcase }
       latest.reject! { |spec| tgzs.include? "#{spec.full_name}.tgz" }
       tasks.push(latest.shift) until latest.empty? # LAME
 
       warn "fetching #{tasks.size} gems"
 
-      threads = []
-      10.times do
-        threads << Thread.new do
-          fetcher = Gem::RemoteFetcher.new nil # fuck proxies
-          until tasks.empty? do
-            spec      = tasks.shift
-            full_name = spec.full_name
-            tgz_name  = "#{full_name}.tgz"
-            gem_name  = "#{full_name}.gem"
+      workers tasks do |spec|
+        full_name = spec.full_name
+        tgz_name  = "#{full_name}.tgz"
+        gem_name  = "#{full_name}.gem"
+        Thread.current[:fetcher] ||= Gem::RemoteFetcher.new nil # fuck proxies
 
-            unless gems.include? gem_name then
-              begin
-                warn "downloading  #{full_name}"
-                fetcher.download(spec, GEMURL, Dir.pwd)
-              rescue Gem::RemoteFetcher::FetchError => e
-                warn "  failed #{full_name}: #{e.message}"
-                next
-              end
-            end
-
-            warn "  converting #{gem_name} to tarball"
-
-            unless File.directory? full_name then
-              system "gem unpack cache/#{gem_name} &> /dev/null"
-              system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
-            end
-
-            system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} #{full_name} && rm -rf   #{full_name} #{gem_name}"
+        unless gems.include? gem_name then
+          begin
+            warn "downloading #{full_name}"
+            Thread.current[:fetcher].download(spec, GEMURL, Dir.pwd)
+          rescue Gem::RemoteFetcher::FetchError => e
+            warn "  failed #{full_name}: #{e.message}"
+            next
           end
         end
-      end
 
-      threads.each do |thread|
-        thread.join
+        warn " converting #{gem_name} to tarball"
+
+        unless File.directory? full_name then
+          system "gem unpack cache/#{gem_name} &> /dev/null"
+          system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
+        end
+
+        system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} #{full_name} && rm -rf   #{full_name} #{gem_name}"
       end
     end
   rescue Interrupt
     warn "user cancelled... quitting"
     exit 1
+  end
+
+  def workers tasks, count = 10
+    threads = []
+    count.times do
+      threads << Thread.new do
+        until tasks.empty? do
+          task = tasks.shift
+          yield task
+        end
+      end
+    end
+
+    threads.each do |thread|
+      thread.join
+    end
   end
 
   def each_gem filter = nil
@@ -299,6 +311,18 @@ end
 
 ############################################################
 # Extensions and Overrides
+
+class Gem::SpecFetcher
+  attr_writer :fetcher
+
+  alias :old_initialize :initialize
+
+  def initialize fetcher = Gem::RemoteFetcher.fetcher
+    old_initialize
+
+    self.fetcher = fetcher
+  end
+end
 
 # bug in RemoteFetcher#download prevents multithreading. Remove after 1.3.2
 class Gem::RemoteFetcher
