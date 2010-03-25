@@ -156,16 +156,38 @@ class Gauntlet
         end
       end
 
-      tasks = Queue.new
+      conversions = Queue.new
+      gem_names = gems.map { |gem| File.basename gem, '.gem' }
+      tgz_names = tgzs.map { |tgz| File.basename tgz, '.tgz' }
+      to_convert = gem_names - tgz_names
+      warn "adding #{to_convert.size} unconverted gems" unless to_convert.empty?
+      conversions.push to_convert.shift until to_convert.empty? # LAME
+
+      downloads = Queue.new
       latest = latest.sort_by { |spec| spec.full_name.downcase }
       latest.reject! { |spec| tgzs.include? "#{spec.full_name}.tgz" }
-      tasks.push(latest.shift) until latest.empty? # LAME
+      downloads.push(latest.shift) until latest.empty? # LAME
 
-      warn "fetching #{tasks.size} gems"
+      converter = Thread.start do
+        while full_name = conversions.shift do
+          tgz_name  = "#{full_name}.tgz"
+          gem_name  = "#{full_name}.gem"
 
-      workers tasks do |spec|
+          warn " converting #{gem_name} to tarball"
+
+          unless File.directory? full_name then
+            system "gem unpack cache/#{gem_name} &> /dev/null"
+            system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
+          end
+
+          system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} #{full_name} && rm -rf #{full_name} #{gem_name}"
+        end
+      end
+
+      warn "fetching #{downloads.size} gems"
+
+      workers downloads do |spec|
         full_name = spec.full_name
-        tgz_name  = "#{full_name}.tgz"
         gem_name  = "#{full_name}.gem"
         Thread.current[:fetcher] ||= Gem::RemoteFetcher.new nil # fuck proxies
 
@@ -179,16 +201,14 @@ class Gauntlet
           end
         end
 
-        warn " converting #{gem_name} to tarball"
-
-        unless File.directory? full_name then
-          system "gem unpack cache/#{gem_name} &> /dev/null"
-          system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
-        end
-
-        system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} #{full_name} && rm -rf   #{full_name} #{gem_name}"
+        conversions.push full_name
       end
+
+      conversions.push nil
+
+      converter.join
     end
+
   rescue Interrupt
     warn "user cancelled... quitting"
     exit 1
