@@ -180,7 +180,7 @@ class Gauntlet
             system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
           end
 
-          system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} #{full_name} && rm -rf #{full_name} #{gem_name}"
+          system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} -- #{full_name} && rm -rf -- #{full_name} #{gem_name}"
         end
       end
 
@@ -253,7 +253,7 @@ class Gauntlet
           end
         end
       ensure
-        system "rm -rf #{process_dir}"
+        system "rm -rf -- #{process_dir}"
       end
     end
   end
