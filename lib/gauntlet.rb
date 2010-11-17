@@ -312,6 +312,13 @@ class Gauntlet
       self.data.delete outdated
     end
 
+    %w[TERM KILL].each do |signal|
+      trap signal do
+        shutdown
+        exit
+      end
+    end
+
     each_gem filter do |name|
       next if should_skip? name
       with_gem name do
@@ -325,6 +332,10 @@ class Gauntlet
   rescue Interrupt
     warn "user cancelled. quitting"
   ensure
+    shutdown
+  end
+
+  def shutdown
     save_yaml data_file, data if dirty
   end
 end
