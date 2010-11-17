@@ -52,7 +52,7 @@ when "report" then
       good += 1
       next
     end
-    files.each do |path, result|
+    files.each do |dir, result|
       case result
       when true then
         good += 1
@@ -63,12 +63,12 @@ when "report" then
       when String then
         bad += 1
 
-        names[File.basename(path)] += 1
+        names[File.basename(dir)] += 1
 
         loop do
-          path = File.dirname path
-          break if path.empty? or path == "."
-          paths[path] += 1
+          dir = File.dirname dir
+          break if dir.empty? or dir == "."
+          dirs[dir] += 1
         end
       end
     end
