@@ -1,6 +1,7 @@
-require 'rubygems/remote_fetcher'
+require 'rubygems'
 require 'thread'
 require 'yaml'
+require 'net/http/persistent'
 
 $u ||= false
 $f ||= false
@@ -10,28 +11,9 @@ Thread.abort_on_exception = true
 
 class Gauntlet
   VERSION = '1.1.0'
-
-  GEMURL = URI.parse 'http://gems.rubyforge.org'
-  GEMDIR = File.expand_path "~/.gauntlet"
+  GEMURL  = URI.parse 'http://gems.rubyforge.org'
+  GEMDIR  = File.expand_path "~/.gauntlet"
   DATADIR = File.expand_path "~/.gauntlet/data"
-
-  # stupid dups usually because of "dash" renames
-  STUPID_GEMS = %w(ajax-scaffold-generator
-                   extract_curves
-                   flickr-fu
-                   hpricot-scrub
-                   html_me
-                   merb-builder
-                   merb-jquery
-                   merb-parts
-                   merb_exceptions
-                   merb_helpers
-                   merb_param_protection
-                   model_graph
-                   not_naughty
-                   rfeedparser-ictv
-                   spec-converter
-                   spec_unit)
 
   attr_accessor :dirty, :data_file, :data
 
@@ -70,71 +52,19 @@ class Gauntlet
   end
 
   def latest_gems
-    return @cache if @cache
+    Gem::SpecFetcher.new.list.map { |source_uri, gems|
+      base_url = source_uri.to_s
+      gems.map { |(name, version, platform)|
+        gem_name = case platform
+                   when Gem::Platform::RUBY then
+                     [name, version].join '-'
+                   else
+                     [name, version, platform].join '-'
+                   end
 
-    @cache = []
-    tasks = Queue.new
-
-    Gem::SpecFetcher.new.list.each do |source_uri, gems|
-      gems.each do |gem|
-        tasks.push [source_uri, gem]
-      end
-    end
-
-    warn "Fetching specs..."
-    workers tasks, 50 do |(source_uri, gem)|
-      Thread.current[:fetcher] ||=
-        Gem::SpecFetcher.new Gem::RemoteFetcher.new(nil)
-      begin
-        @cache << Thread.current[:fetcher].fetch_spec(gem, source_uri)
-      rescue Gem::RemoteFetcher::FetchError => e
-        warn "couldn't fetch #{gem.inspect} (#{e.message})"
-      end
-    end
-    warn "...done"
-
-    @cache
-  end
-
-  def gems_by_name
-    @by_name ||= Hash[*latest_gems.map { |gem|
-                        [gem.name, gem, gem.full_name, gem]
-                      }.flatten]
-  end
-
-  def dependencies_of name
-    index = source_index
-    gems_by_name[name].dependencies.map { |dep| index.search(dep).last }
-  end
-
-  def dependent_upon name
-    latest_gems.find_all { |gem|
-      gem.dependencies.any? { |dep| dep.name == name }
-    }
-  end
-
-  def find_stupid_gems
-    gems   = Hash.new { |h,k| h[k] = [] }
-    stupid = []
-    latest = {}
-
-    latest_gems.each do |spec|
-      name = spec.name.gsub(/-/, '_')
-      next unless name =~ /_/
-      gems[name] << spec
-    end
-
-    gems.reject! { |k,v| v.size == 1 || v.map { |s| s.name }.uniq.size == 1 }
-
-    gems.each do |k,v|
-      sorted = v.sort_by { |spec| spec.version }
-      latest[sorted.last.name] = true
-      sorted.each do |spec|
-        stupid << spec.name unless latest[spec.name]
-      end
-    end
-
-    stupid.uniq
+        [gem_name, File.join(base_url, "/gems/#{gem_name}.gem")]
+      }
+    }.flatten(1)
   end
 
   def update_gem_tarballs
@@ -148,7 +78,7 @@ class Gauntlet
       gems = Dir["*.gem"]
       tgzs = Dir["*.tgz"]
 
-      old = tgzs - latest.map { |spec| "#{spec.full_name}.tgz" }
+      old = tgzs - latest.map { |(full_name, url)| "#{full_name}.tgz" }
       unless old.empty? then
         warn "deleting #{old.size} tgzs"
         old.each do |tgz|
@@ -160,16 +90,22 @@ class Gauntlet
       gem_names = gems.map { |gem| File.basename gem, '.gem' }
       tgz_names = tgzs.map { |tgz| File.basename tgz, '.tgz' }
       to_convert = gem_names - tgz_names
+
+      seen_tgzs = Hash[*tgzs.map { |name| [name, true] }.flatten]
+
       warn "adding #{to_convert.size} unconverted gems" unless to_convert.empty?
+
       conversions.push to_convert.shift until to_convert.empty? # LAME
 
       downloads = Queue.new
-      latest = latest.sort_by { |spec| spec.full_name.downcase }
-      latest.reject! { |spec| tgzs.include? "#{spec.full_name}.tgz" }
+      latest = latest.sort_by { |(full_name, url)| full_name.downcase }
+      latest.reject! { |(full_name, url)| seen_tgzs["#{full_name}.tgz"] }
+
       downloads.push(latest.shift) until latest.empty? # LAME
 
       converter = Thread.start do
-        while full_name = conversions.shift do
+        while payload = conversions.shift do
+          full_name, _ = payload
           tgz_name  = "#{full_name}.tgz"
           gem_name  = "#{full_name}.gem"
 
@@ -180,24 +116,43 @@ class Gauntlet
             system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
           end
 
-          system "chmod -R u+rwX #{full_name} && tar zmcf #{tgz_name} -- #{full_name} && rm -rf -- #{full_name} #{gem_name}"
+          system ["chmod -R u+rwX #{full_name}",
+                  "tar zmcf #{tgz_name} -- #{full_name}",
+                  "rm -rf -- #{full_name} #{gem_name}"].join(" && ")
         end
       end
 
       warn "fetching #{downloads.size} gems"
 
-      workers downloads do |spec|
-        full_name = spec.full_name
+      http = Net::HTTP::Persistent.new
+
+      workers downloads do |full_name, url|
         gem_name  = "#{full_name}.gem"
-        Thread.current[:fetcher] ||= Gem::RemoteFetcher.new nil # fuck proxies
 
         unless gems.include? gem_name then
+          limit = 3
           begin
             warn "downloading #{full_name}"
-            Thread.current[:fetcher].download(spec, GEMURL, Dir.pwd)
-          rescue Gem::RemoteFetcher::FetchError => e
-            warn "  failed #{full_name}: #{e.message}"
-            next
+            while limit > 0 do
+              http.request URI.parse(url) do |response|
+                case response
+                when Net::HTTPSuccess
+                  File.open gem_name, "wb" do |f|
+                    response.read_body do |chunk|
+                      f.write chunk
+                    end
+                  end
+                  limit = 0 # kinda lame.
+                when Net::HTTPRedirection
+                  url = response['location']
+                  limit -= 1
+                else
+                  warn "  #{full_name} got #{response.code}. skipping."
+                end
+              end
+            end
+          rescue Net::HTTP::Persistent::Error => e
+            warn "  #{full_name} raised #{e.message}. skipping."
           end
         end
 
@@ -355,71 +310,6 @@ class Gem::SpecFetcher
   end
 end
 
-# bug in RemoteFetcher#download prevents multithreading. Remove after 1.3.2
-class Gem::RemoteFetcher
-  alias :old_download :download
-  def download(spec, source_uri, install_dir = Gem.dir)
-    if File.writable?(install_dir)
-      cache_dir = File.join install_dir, 'cache'
-    else
-      cache_dir = File.join(Gem.user_dir, 'cache')
-    end
-
-    gem_file_name = "#{spec.full_name}.gem"
-    local_gem_path = File.join cache_dir, gem_file_name
-
-    FileUtils.mkdir_p cache_dir rescue nil unless File.exist? cache_dir
-
-    source_uri = URI.parse source_uri unless URI::Generic === source_uri
-    scheme = source_uri.scheme
-
-    # URI.parse gets confused by MS Windows paths with forward slashes.
-    scheme = nil if scheme =~ /^[a-z]$/i
-
-    case scheme
-    when 'http', 'https' then
-      unless File.exist? local_gem_path then
-        begin
-          say "Downloading gem #{gem_file_name}" if
-            Gem.configuration.really_verbose
-
-          remote_gem_path = source_uri + "gems/#{gem_file_name}"
-
-          gem = self.fetch_path remote_gem_path
-        rescue Gem::RemoteFetcher::FetchError
-          raise if spec.original_platform == spec.platform
-
-          alternate_name = "#{spec.original_name}.gem"
-
-          say "Failed, downloading gem #{alternate_name}" if
-            Gem.configuration.really_verbose
-
-          remote_gem_path = source_uri + "gems/#{alternate_name}"
-
-          gem = self.fetch_path remote_gem_path
-        end
-
-        File.open local_gem_path, 'wb' do |fp|
-          fp.write gem
-        end
-      end
-    when nil, 'file' then # TODO test for local overriding cache
-      begin
-        FileUtils.cp source_uri.to_s, local_gem_path
-      rescue Errno::EACCES
-        local_gem_path = source_uri.to_s
-      end
-
-      say "Using local gem #{local_gem_path}" if
-        Gem.configuration.really_verbose
-    else
-      raise Gem::InstallError, "unsupported URI scheme #{source_uri.scheme}"
-    end
-
-    local_gem_path
-  end
-end
-
 class Array
   def sum
     sum = 0
@@ -442,3 +332,4 @@ class Array
     return Math.sqrt(self.sample_variance)
   end
 end
+
