@@ -148,10 +148,11 @@ class Gauntlet
                   limit -= 1
                 else
                   warn "  #{full_name} got #{response.code}. skipping."
+                  limit = 0
                 end
               end
             end
-          rescue Net::HTTP::Persistent::Error => e
+          rescue SocketError, Net::HTTP::Persistent::Error => e
             warn "  #{full_name} raised #{e.message}. skipping."
           end
         end
