@@ -6,18 +6,17 @@ require 'rubygems'
 require 'gauntlet'
 
 class GrepGauntlet < Gauntlet
-  attr_accessor :pattern
+  attr_accessor :args
 
-  def initialize pattern
-    self.pattern = pattern
+  def initialize args
+    self.args = args
   end
 
   def run name
-    system "find . -type f -print0 | xargs -0 grep #{pattern}"
+    system "grep", *args
   end
 end
 
-pattern = ARGV.shift
-flogger = GrepGauntlet.new pattern
+flogger = GrepGauntlet.new ARGV
 flogger.run_the_gauntlet
 
