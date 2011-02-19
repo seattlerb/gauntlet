@@ -1,3 +1,24 @@
+=== 2.0.0 / 2011-02-18
+
+* 1 major enhancement:
+
+  * Dropped dependencies_of, dependent_upon, gems_by_name, find_stupid_gems.
+
+* 4 minor enhancements:
+
+  * Added support for new rubygem server changes
+  * Separate downloads from conversion to .tar.gz
+  * Stripped down gauntlet_grep to pass all args through to grep
+  * Switched to net-http-persistent to clean up and speed up downloads.
+
+* 5 bug fixes:
+
+  * 1.9 fix for shadowed variables
+  * Add TERM and KILL handlers that shutdown nicely
+  * Fixes for stupidly named gems (--1)
+  * Handle SocketError and 404s more elegantly
+  * Switch to SpecFetcher for latest RubyGems
+
 === 1.1.0 / 2009-06-23
 
 * 6 minor enhancements:
