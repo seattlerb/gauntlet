@@ -1,6 +1,6 @@
 = gauntlet
 
-* http://rubyforge.org/projects/seattlerb
+home :: https://github.com/seattlerb/gauntlet
 
 == DESCRIPTION:
 
@@ -45,7 +45,7 @@ gems and storing off the data.
 
 (The MIT License)
 
-Copyright (c) 2008 Ryan Davis, Seattle.rb
+Copyright (c) Ryan Davis, Seattle.rb
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
