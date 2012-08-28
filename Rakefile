@@ -11,11 +11,11 @@ Hoe.spec 'gauntlet' do
 
   self.rubyforge_name = 'seattlerb'
 
-  extra_deps << ["net-http-persistent", "~> 1.4.1"]
+  dependency "net-http-persistent", "~> 1.4.1"
 end
 
 desc "update your gauntlet gems"
-task :update do
+task :update => :isolate do
   sh "ruby -I lib ./bin/gauntlet update"
 end
 
