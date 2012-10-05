@@ -1,3 +1,9 @@
+=== 2.0.1 / 2012-10-05
+
+* 1 bug fix:
+
+  * Cleaned dependency and isolated the update task
+
 === 2.0.0 / 2011-02-18
 
 * 1 major enhancement:
