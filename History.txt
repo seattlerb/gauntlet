@@ -29,7 +29,7 @@
 
 * 6 minor enhancements:
 
-  *	Added update command
+  * Added update command
   * Added example plugin lib/gauntlet_grep.rb
   * Added subcommands: help list report
   * Cleaned output
