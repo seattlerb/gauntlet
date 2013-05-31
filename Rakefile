@@ -16,7 +16,7 @@ end
 
 desc "update your gauntlet gems"
 task :update => :isolate do
-  sh "ruby -I lib ./bin/gauntlet update"
+  ruby "-I lib ./bin/gauntlet update"
 end
 
 # vim: syntax=ruby
