@@ -112,7 +112,7 @@ class Gauntlet
           warn " converting #{gem_name} to tarball"
 
           unless File.directory? full_name then
-            system "gem unpack cache/#{gem_name} &> /dev/null"
+            system "gem unpack cache/#{gem_name} > /dev/null 2>&1"
             system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
           end
 
