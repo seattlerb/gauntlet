@@ -1,3 +1,9 @@
+=== 2.0.2 / 2013-06-28
+
+* 1 bug fix:
+
+  * Keep stderr output from gem unpack in case there are problems... Some gems are corrupt or something
+
 === 2.0.1 / 2012-10-05
 
 * 1 bug fix:
