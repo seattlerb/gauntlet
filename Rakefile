@@ -9,8 +9,6 @@ Hoe.plugin :isolate
 Hoe.spec 'gauntlet' do
   developer 'Ryan Davis', 'ryand-ruby@zenspider.com'
 
-  self.rubyforge_name = 'seattlerb'
-
   dependency "net-http-persistent", "~> 1.4.1"
 end
 
