@@ -52,19 +52,13 @@ class Gauntlet
   end
 
   def latest_gems
-    Gem::SpecFetcher.new.list.map { |source_uri, gems|
-      base_url = source_uri.to_s
-      gems.map { |(name, version, platform)|
-        gem_name = case platform
-                   when Gem::Platform::RUBY then
-                     [name, version].join '-'
-                   else
-                     [name, version, platform].join '-'
-                   end
-
-        [gem_name, File.join(base_url, "/gems/#{gem_name}.gem")]
+    list, _ = Gem::SpecFetcher.new.available_specs(:latest)
+    list.map do |source, gems|
+      gems.map { |tuple|
+        gem_name = File.basename(tuple.spec_name, '.gemspec')
+        [gem_name, source.uri.merge("/gems/#{gem_name}.gem")]
       }
-    }.flatten(1)
+    end.flatten(1)
   end
 
   def update_gem_tarballs
@@ -78,7 +72,7 @@ class Gauntlet
       gems = Dir["*.gem"]
       tgzs = Dir["*.tgz"]
 
-      old = tgzs - latest.map { |(full_name, url)| "#{full_name}.tgz" }
+      old = tgzs - latest.map { |(full_name, _url)| "#{full_name}.tgz" }
       unless old.empty? then
         warn "deleting #{old.size} tgzs"
         old.each do |tgz|
@@ -98,8 +92,8 @@ class Gauntlet
       conversions.push to_convert.shift until to_convert.empty? # LAME
 
       downloads = Queue.new
-      latest = latest.sort_by { |(full_name, url)| full_name.downcase }
-      latest.reject! { |(full_name, url)| seen_tgzs["#{full_name}.tgz"] }
+      latest = latest.sort_by { |(full_name, _url)| full_name.downcase }
+      latest.reject! { |(full_name, _url)| seen_tgzs["#{full_name}.tgz"] }
 
       downloads.push(latest.shift) until latest.empty? # LAME
 
@@ -116,7 +110,7 @@ class Gauntlet
             system "gem spec -l cache/#{gem_name} > #{full_name}/gemspec"
           end
 
-          system ["chmod -R u+rwX #{full_name}",
+          system ["chmod -R u+rwX -- #{full_name}",
                   "tar zmcf #{tgz_name} -- #{full_name}",
                   "rm -rf -- #{full_name} #{gem_name}"].join(" && ")
         end
@@ -124,9 +118,7 @@ class Gauntlet
 
       warn "fetching #{downloads.size} gems"
 
-      http = Net::HTTP::Persistent.new
-
-      workers downloads do |full_name, url|
+      workers downloads do |http, (full_name, url)|
         gem_name  = "#{full_name}.gem"
 
         unless gems.include? gem_name then
@@ -134,7 +126,7 @@ class Gauntlet
           begin
             warn "downloading #{full_name}"
             while limit > 0 do
-              http.request URI.parse(url) do |response|
+              http.request url do |response|
                 case response
                 when Net::HTTPSuccess
                   File.open gem_name, "wb" do |f|
@@ -144,7 +136,7 @@ class Gauntlet
                   end
                   limit = 0 # kinda lame.
                 when Net::HTTPRedirection
-                  url = response['location']
+                  url = URI.parse(response['location'])
                   limit -= 1
                 else
                   warn "  #{full_name} got #{response.code}. skipping."
@@ -174,9 +166,11 @@ class Gauntlet
     threads = []
     count.times do
       threads << Thread.new do
+        http = Net::HTTP::Persistent.new
+
         until tasks.empty? do
           task = tasks.shift
-          yield task
+          yield http, task
         end
       end
     end
