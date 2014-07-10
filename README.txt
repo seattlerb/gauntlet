@@ -19,18 +19,20 @@ gems and storing off the data.
 == SYNOPSIS:
 
   require 'gauntlet'
-  
+
   class MyGauntlet < Gauntlet
     def run name
       data[name] = Dir["**/*.rb"]
       self.dirty = true
     end
   end
-  
+
   filter = ARGV.shift
   filter = Regexp.new filter if filter
-  
+
   gauntlet = MyGauntlet.new
+  gauntlet.source_index
+  gauntlet.update_gem_tarballs
   gauntlet.run_the_gauntlet filter
 
 == REQUIREMENTS:
