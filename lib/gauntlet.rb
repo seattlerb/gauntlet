@@ -10,7 +10,7 @@ $F ||= false
 Thread.abort_on_exception = true
 
 class Gauntlet
-  VERSION = '2.0.2'
+  VERSION = '2.1.0'
   GEMURL  = URI.parse 'http://gems.rubyforge.org'
   GEMDIR  = File.expand_path "~/.gauntlet"
   DATADIR = File.expand_path "~/.gauntlet/data"

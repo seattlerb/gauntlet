@@ -1,3 +1,17 @@
+=== 2.1.0 / 2014-08-28
+
+* 1 minor enhancement:
+
+  * Updated for newer versions of rubygems.
+
+* 5 bug fixes:
+
+  * Fixed 1.9/2.0 warnings.
+  * Fixed redirect URIs.
+  * Fixed system call to chmod to use quotes on full_name.
+  * Handle more exceptions (SSLError, Persistent errors, etc)
+  * Removed dead rubyforge setting in Rakefile
+
 === 2.0.2 / 2013-06-28
 
 * 1 bug fix:
