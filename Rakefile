@@ -10,6 +10,8 @@ Hoe.spec 'gauntlet' do
   developer 'Ryan Davis', 'ryand-ruby@zenspider.com'
 
   dependency "net-http-persistent", "~> 1.4.1"
+
+  license "MIT"
 end
 
 desc "update your gauntlet gems"
